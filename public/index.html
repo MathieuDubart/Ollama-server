@@ -4,465 +4,68 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama Chat</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f0f23;
-            color: #ffffff;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .header {
-            background: #1a1a2e;
-            padding: 1rem 2rem;
-            border-bottom: 1px solid #16213e;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-        }
-
-        .header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #64ffda;
-        }
-
-        .header-controls {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-        }
-
-        .status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #ff4444;
-            animation: pulse 2s infinite;
-        }
-
-        .status-dot.connected {
-            background: #64ffda;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        select {
-            background: #16213e;
-            color: white;
-            border: 1px solid #2a2a4a;
-            border-radius: 8px;
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
-            min-width: 200px;
-        }
-
-        select:focus {
-            outline: none;
-            border-color: #64ffda;
-        }
-
-        .chat-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            max-width: 800px;
-            margin: 0 auto;
-            width: 100%;
-            padding: 0 1rem;
-        }
-
-        .messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 2rem 0;
-            display: flex;
-            flex-direction: column;
-            gap: 1.5rem;
-        }
-
-        .message {
-            max-width: 85%;
-            padding: 1rem 1.5rem;
-            border-radius: 1rem;
-            line-height: 1.5;
-            word-wrap: break-word;
-        }
-
-        .message.user {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            margin-left: auto;
-            border-bottom-right-radius: 0.5rem;
-        }
-
-        .message.assistant {
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-bottom-left-radius: 0.5rem;
-            white-space: pre-wrap;
-        }
-
-        .input-area {
-            padding: 1.5rem 0;
-            border-top: 1px solid #2a2a4a;
-        }
-
-        .input-container {
-            display: flex;
-            gap: 0.75rem;
-            align-items: flex-end;
-        }
-
-        textarea {
-            flex: 1;
-            background: #1a1a2e;
-            border: 1px solid #2a2a4a;
-            border-radius: 1rem;
-            color: white;
-            padding: 1rem 1.5rem;
-            resize: none;
-            min-height: 50px;
-            max-height: 120px;
-            font-size: 1rem;
-            line-height: 1.4;
-        }
-
-        textarea:focus {
-            outline: none;
-            border-color: #64ffda;
-        }
-
-        textarea::placeholder {
-            color: #666;
-        }
-
-        .send-btn {
-            background: linear-gradient(135deg, #64ffda, #4fc3f7);
-            border: none;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            color: #0f0f23;
-            font-weight: bold;
-        }
-
-        .send-btn:hover:not(:disabled) {
-            transform: scale(1.05);
-            box-shadow: 0 4px 20px rgba(100, 255, 218, 0.3);
-        }
-
-        .send-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .loading {
-            display: none;
-            padding: 1rem;
-            text-align: center;
-            color: #64ffda;
-            font-style: italic;
-        }
-
-        .clear-btn {
-            background: transparent;
-            border: 1px solid #2a2a4a;
-            color: #fff;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.875rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .clear-btn:hover {
-            border-color: #ff4444;
-            color: #ff4444;
-        }
-
-        .empty-state {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            color: #666;
-            gap: 1rem;
-        }
-
-        .empty-state h2 {
-            font-size: 1.5rem;
-            color: #64ffda;
-        }
-
-        /* Scrollbar styling */
-        .messages::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .messages::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .messages::-webkit-scrollbar-thumb {
-            background: #2a2a4a;
-            border-radius: 3px;
-        }
-
-        .messages::-webkit-scrollbar-thumb:hover {
-            background: #404060;
-        }
-
-        /* Mobile responsive */
-        @media (max-width: 768px) {
-            .header {
-                padding: 1rem;
-                flex-direction: column;
-                gap: 0.75rem;
-            }
-
-            .header-controls {
-                width: 100%;
-                justify-content: space-between;
-            }
-
-            .chat-container {
-                padding: 0 0.75rem;
-            }
-
-            .message {
-                max-width: 90%;
-            }
-
-            select {
-                min-width: 150px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <div class="header">
-        <h1>🦙 Ollama</h1>
-        <div class="header-controls">
-            <div class="status">
-                <div class="status-dot" id="statusDot"></div>
-                <span id="statusText">Connexion...</span>
-            </div>
-            <select id="modelSelect">
-                <option value="">Chargement...</option>
-            </select>
-            <button class="clear-btn" onclick="clearChat()">Effacer</button>
+<body class="dark-theme">
+    <!-- Bouton pour rouvrir la sidebar -->
+    <button class="sidebar-reopener" id="sidebarReopener">→</button>
+    
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="new-chat-btn" id="newChatBtn">+ Nouveau chat</button>
+            <button class="sidebar-toggle" id="sidebarToggle">←</button>
+        </div>
+        
+        <div class="chat-history" id="chatHistory">
+            <!-- Les chats seront ajoutés ici dynamiquement -->
+        </div>
+        
+        <div class="sidebar-footer">
+            <button class="clear-all-btn" id="clearAllBtn">Tout effacer</button>
         </div>
     </div>
 
-    <div class="chat-container">
-        <div class="messages" id="messages">
-            <div class="empty-state">
-                <h2>Prêt à discuter</h2>
-                <p>Sélectionnez un modèle et commencez la conversation</p>
+    <div class="main-content">
+        <div class="header">
+            <div class="header-left">
+                <button class="sidebar-toggle mobile" id="sidebarToggleMobile">☰</button>
+                <h1>🦙 Ollama</h1>
+            </div>
+            <div class="header-controls">
+                <button class="theme-toggle" id="themeToggle">🌙</button>
+                <div class="status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Connexion...</span>
+                </div>
+                <select id="modelSelect">
+                    <option value="">Chargement...</option>
+                </select>
+                <button class="clear-btn" id="clearBtn">Effacer</button>
             </div>
         </div>
-        
-        <div class="loading" id="loading">Génération en cours...</div>
 
-        <div class="input-area">
-            <div class="input-container">
-                <textarea 
-                    id="promptInput" 
-                    placeholder="Votre message..."
-                    rows="1"
-                    onkeydown="handleKeyDown(event)"
-                    oninput="autoResize(this)"></textarea>
-                <button class="send-btn" onclick="sendMessage()" id="sendBtn">➤</button>
+        <div class="chat-container">
+            <div class="messages" id="messages">
+                <div class="empty-state">
+                    <h2>Prêt à discuter</h2>
+                    <p>Sélectionnez un modèle et commencez la conversation</p>
+                </div>
+            </div>
+            
+            <div class="loading" id="loading">Génération en cours...</div>
+
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea 
+                        id="promptInput" 
+                        placeholder="Votre message..."
+                        rows="1"></textarea>
+                    <button class="send-btn" id="sendBtn">➤</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <script>
-        let isGenerating = false;
-        let currentModel = '';
-        let hasMessages = false;
-        
-        // Auto-resize textarea
-        function autoResize(textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            checkStatus();
-            loadModels();
-        });
-
-        async function checkStatus() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-                
-                const dot = document.getElementById('statusDot');
-                const text = document.getElementById('statusText');
-                
-                if (data.status === 'connected') {
-                    dot.classList.add('connected');
-                    text.textContent = 'Connecté';
-                } else {
-                    dot.classList.remove('connected');
-                    text.textContent = 'Déconnecté';
-                }
-            } catch {
-                document.getElementById('statusText').textContent = 'Erreur';
-            }
-        }
-
-        async function loadModels() {
-            try {
-                const response = await fetch('/api/models');
-                const data = await response.json();
-                
-                const select = document.getElementById('modelSelect');
-                select.innerHTML = '';
-                
-                if (data.models?.length > 0) {
-                    data.models.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model.name;
-                        option.textContent = model.name;
-                        select.appendChild(option);
-                    });
-                    
-                    select.addEventListener('change', (e) => {
-                        currentModel = e.target.value;
-                    });
-                    
-                    // Select first model by default
-                    currentModel = data.models[0].name;
-                    select.value = currentModel;
-                } else {
-                    select.innerHTML = '<option value="">Aucun modèle</option>';
-                }
-            } catch {
-                document.getElementById('modelSelect').innerHTML = '<option value="">Erreur</option>';
-            }
-        }
-
-        function handleKeyDown(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('promptInput');
-            const prompt = input.value.trim();
-            
-            if (!prompt || !currentModel || isGenerating) return;
-            
-            // Hide empty state
-            if (!hasMessages) {
-                document.querySelector('.empty-state').style.display = 'none';
-                hasMessages = true;
-            }
-            
-            isGenerating = true;
-            document.getElementById('sendBtn').disabled = true;
-            document.getElementById('loading').style.display = 'block';
-            
-            addMessage(prompt, 'user');
-            input.value = '';
-            input.style.height = 'auto';
-            
-            try {
-                await handleStreamingResponse(prompt);
-            } catch (error) {
-                console.error('Erreur:', error);
-                addMessage('❌ Erreur lors de la génération', 'assistant');
-            } finally {
-                isGenerating = false;
-                document.getElementById('sendBtn').disabled = false;
-                document.getElementById('loading').style.display = 'none';
-            }
-        }
-
-        async function handleStreamingResponse(prompt) {
-            const response = await fetch('/api/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: currentModel,
-                    prompt: prompt,
-                    stream: true
-                })
-            });
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            const assistantMessage = addMessage('', 'assistant');
-            let fullResponse = '';
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                fullResponse += chunk;
-                assistantMessage.textContent = fullResponse;
-                scrollToBottom();
-            }
-        }
-
-        function addMessage(content, sender) {
-            const messages = document.getElementById('messages');
-            const message = document.createElement('div');
-            message.className = `message ${sender}`;
-            message.textContent = content;
-            messages.appendChild(message);
-            scrollToBottom();
-            return message;
-        }
-
-        function scrollToBottom() {
-            const messages = document.getElementById('messages');
-            messages.scrollTop = messages.scrollHeight;
-        }
-
-        function clearChat() {
-            const messages = document.getElementById('messages');
-            messages.innerHTML = '<div class="empty-state"><h2>Prêt à discuter</h2><p>Sélectionnez un modèle et commencez la conversation</p></div>';
-            hasMessages = false;
-        }
-
-        // Auto-check status every 30 seconds
-        setInterval(checkStatus, 30000);
-    </script>
+    <script src="script.js"></script>
 </body>
 </html>
