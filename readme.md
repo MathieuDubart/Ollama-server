@@ -35,7 +35,12 @@ The server runs on `http://localhost:11434` by default.
 
 ## Web UI (Optional)
 
-Access the Web UI at `http://localhost:3000`
+Run the UI with :
+```bash
+npm run start
+```
+
+Access at `http://localhost:3000`
 
 ## Troubleshooting
 
