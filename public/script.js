@@ -69,14 +69,12 @@ class OllamaChat {
     toggleSidebar() {
         this.elements.sidebar.classList.toggle('collapsed');
         this.updateSidebarReopener();
-        // Save sidebar state
         localStorage.setItem('sidebar-collapsed', this.elements.sidebar.classList.contains('collapsed'));
     }
 
     openSidebar() {
         this.elements.sidebar.classList.remove('collapsed');
         this.updateSidebarReopener();
-        // Save sidebar state
         localStorage.setItem('sidebar-collapsed', false);
     }
 
@@ -97,11 +95,11 @@ class OllamaChat {
         this.updateSidebarReopener();
     }
 
-    createNewChat() {
+    async createNewChat() {
         const chatId = `chat_${Date.now()}_${++this.chatCounter}`;
         const chat = {
             id: chatId,
-            title: 'Nouveau chat',
+            title: 'New chat',
             messages: [],
             createdAt: new Date(),
             updatedAt: new Date()
@@ -111,7 +109,9 @@ class OllamaChat {
         this.currentChatId = chatId;
         this.renderChatHistory();
         this.renderCurrentChat();
-        this.saveChatHistory();
+        
+        // Sauvegarder en base de données
+        await this.saveChatToDatabase(chat);
     }
 
     loadChat(chatId) {
@@ -122,49 +122,66 @@ class OllamaChat {
         }
     }
 
-    deleteChat(chatId) {
-        if (confirm('Êtes-vous sûr de vouloir supprimer ce chat ?')) {
-            this.chats.delete(chatId);
-            
-            if (this.currentChatId === chatId) {
-                // Load the most recent chat or create a new one
-                const remainingChats = Array.from(this.chats.values())
-                    .sort((a, b) => b.updatedAt - a.updatedAt);
+    async deleteChat(chatId) {
+        if (confirm('Are your sure you want to delete this chat?')) {
+            try {
+                // Supprimer de la base de données
+                await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
                 
-                if (remainingChats.length > 0) {
-                    this.currentChatId = remainingChats[0].id;
-                } else {
-                    this.createNewChat();
-                    return;
+                this.chats.delete(chatId);
+                
+                if (this.currentChatId === chatId) {
+                    const remainingChats = Array.from(this.chats.values())
+                        .sort((a, b) => b.updatedAt - a.updatedAt);
+                    
+                    if (remainingChats.length > 0) {
+                        this.currentChatId = remainingChats[0].id;
+                    } else {
+                        await this.createNewChat();
+                        return;
+                    }
                 }
+                
+                this.renderChatHistory();
+                this.renderCurrentChat();
+            } catch (error) {
+                console.error('Error while deleting chats : ', error);
             }
-            
-            this.renderChatHistory();
-            this.renderCurrentChat();
-            this.saveChatHistory();
         }
     }
 
-    clearCurrentChat() {
+    async clearCurrentChat() {
         if (this.currentChatId && this.chats.has(this.currentChatId)) {
-            const chat = this.chats.get(this.currentChatId);
-            chat.messages = [];
-            chat.title = 'Nouveau chat';
-            chat.updatedAt = new Date();
-            
-            this.renderChatHistory();
-            this.renderCurrentChat();
-            this.saveChatHistory();
+            try {
+                // Vider les messages en base de données
+                await fetch(`/api/chats/${this.currentChatId}/messages`, { method: 'DELETE' });
+                
+                const chat = this.chats.get(this.currentChatId);
+                chat.messages = [];
+                chat.title = 'Nouveau chat';
+                chat.updatedAt = new Date();
+                
+                this.renderChatHistory();
+                this.renderCurrentChat();
+            } catch (error) {
+                console.error('Error while cleaning chats :', error);
+            }
         }
     }
 
-    clearAllChats() {
-        if (confirm('Êtes-vous sûr de vouloir supprimer tous les chats ?')) {
-            this.chats.clear();
-            this.currentChatId = null;
-            this.renderChatHistory();
-            this.createNewChat();
-            this.saveChatHistory();
+    async clearAllChats() {
+        if (confirm('You\'re about to delete all chats. Are you sure?')) {
+            try {
+                // Supprimer tous les chats de la base de données
+                await fetch('/api/chats', { method: 'DELETE' });
+                
+                this.chats.clear();
+                this.currentChatId = null;
+                this.renderChatHistory();
+                await this.createNewChat();
+            } catch (error) {
+                console.error('Error while deleting chats:', error);
+            }
         }
     }
 
@@ -180,7 +197,7 @@ class OllamaChat {
             
             const preview = chat.messages.length > 0 
                 ? chat.messages[chat.messages.length - 1].content.substring(0, 50) + '...'
-                : 'Chat vide';
+                : 'Empty chat';
             
             chatItem.innerHTML = `
                 <div class="chat-item-title">${chat.title}</div>
@@ -221,70 +238,118 @@ class OllamaChat {
     showEmptyState() {
         this.elements.messages.innerHTML = `
             <div class="empty-state">
-                <h2>Prêt à discuter</h2>
-                <p>Sélectionnez un modèle et commencez la conversation</p>
+                <h2>Ready to chat</h2>
+                <p>Select a model and start conversation</p>
             </div>
         `;
         this.elements.emptyState = this.elements.messages.querySelector('.empty-state');
     }
 
-    updateChatTitle(chatId, firstMessage) {
+    async updateChatTitle(chatId, firstMessage) {
         if (this.chats.has(chatId)) {
             const chat = this.chats.get(chatId);
-            if (chat.title === 'Nouveau chat') {
+            if (chat.title === 'New chat') {
                 chat.title = firstMessage.length > 30 
                     ? firstMessage.substring(0, 30) + '...'
                     : firstMessage;
+                chat.updatedAt = new Date();
+                
+                // Mettre à jour en base de données
+                await fetch(`/api/chats/${chatId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: chat.title,
+                        updatedAt: chat.updatedAt.toISOString()
+                    })
+                });
+                
                 this.renderChatHistory();
             }
         }
     }
 
-    saveChatHistory() {
-        const chatsData = Array.from(this.chats.entries()).map(([id, chat]) => [
-            id,
-            {
-                ...chat,
-                createdAt: chat.createdAt.toISOString(),
-                updatedAt: chat.updatedAt.toISOString()
-            }
-        ]);
-        localStorage.setItem('ollama-chats', JSON.stringify(chatsData));
-        localStorage.setItem('ollama-current-chat', this.currentChatId);
+    async saveChatToDatabase(chat) {
+        try {
+            await fetch('/api/chats', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    chat: {
+                        id: chat.id,
+                        title: chat.title,
+                        createdAt: chat.createdAt.toISOString(),
+                        updatedAt: chat.updatedAt.toISOString(),
+                        messages: chat.messages.map(msg => ({
+                            ...msg,
+                            timestamp: msg.timestamp.toISOString()
+                        }))
+                    }
+                })
+            });
+        } catch (error) {
+            console.error('Error while saving chat : ', error);
+        }
     }
 
-    loadChatHistory() {
-        const savedChats = localStorage.getItem('ollama-chats');
-        const savedCurrentChat = localStorage.getItem('ollama-current-chat');
-        
-        if (savedChats) {
-            try {
-                const chatsData = JSON.parse(savedChats);
-                this.chats = new Map(
-                    chatsData.map(([id, chat]) => [
-                        id,
-                        {
-                            ...chat,
-                            createdAt: new Date(chat.createdAt),
-                            updatedAt: new Date(chat.updatedAt)
-                        }
-                    ])
-                );
-                
-                if (savedCurrentChat && this.chats.has(savedCurrentChat)) {
-                    this.currentChatId = savedCurrentChat;
-                }
-                
-                this.renderChatHistory();
-                this.renderCurrentChat();
-            } catch (error) {
-                console.error('Erreur lors du chargement des chats:', error);
+    async saveMessageToDatabase(chatId, message) {
+        try {
+            await fetch(`/api/chats/${chatId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: {
+                        sender: message.sender,
+                        content: message.content,
+                        timestamp: message.timestamp.toISOString()
+                    }
+                })
+            });
+        } catch (error) {
+            console.error('Error while trying to save messages', error);
+        }
+    }
+
+    async loadChatHistory() {
+        try {
+            const response = await fetch('/api/chats');
+            const chatsData = await response.json();
+            
+            this.chats.clear();
+            
+            chatsData.forEach(chatData => {
+                const chat = {
+                    id: chatData.id,
+                    title: chatData.title,
+                    createdAt: new Date(chatData.createdAt),
+                    updatedAt: new Date(chatData.updatedAt),
+                    messages: chatData.messages.map(msg => ({
+                        sender: msg.sender,
+                        content: msg.content,
+                        timestamp: new Date(msg.timestamp)
+                    }))
+                };
+                this.chats.set(chat.id, chat);
+            });
+            
+            // Sélectionner le chat le plus récent
+            if (this.chats.size > 0) {
+                const latestChat = Array.from(this.chats.values())
+                    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+                this.currentChatId = latestChat.id;
             }
+            
+            this.renderChatHistory();
+            this.renderCurrentChat();
+        } catch (error) {
+            console.error('Error while downloading chats:', error);
+            // Créer un nouveau chat si erreur
+            await this.createNewChat();
         }
         
-        // Create initial chat if none exists
+        // Créer un chat initial si aucun n'existe
         if (this.chats.size === 0) {
-            this.createNewChat();
+            await this.createNewChat();
         }
         
         this.loadSidebarState();
@@ -325,13 +390,13 @@ class OllamaChat {
             
             if (data.status === 'connected') {
                 this.elements.statusDot.classList.add('connected');
-                this.elements.statusText.textContent = 'Connecté';
+                this.elements.statusText.textContent = 'Connected';
             } else {
                 this.elements.statusDot.classList.remove('connected');
-                this.elements.statusText.textContent = 'Déconnecté';
+                this.elements.statusText.textContent = 'Disconnected';
             }
         } catch {
-            this.elements.statusText.textContent = 'Erreur';
+            this.elements.statusText.textContent = 'Error';
         }
     }
 
@@ -353,7 +418,7 @@ class OllamaChat {
                 this.currentModel = data.models[0].name;
                 this.elements.modelSelect.value = this.currentModel;
             } else {
-                this.elements.modelSelect.innerHTML = '<option value="">Aucun modèle</option>';
+                this.elements.modelSelect.innerHTML = '<option value="">No model available</option>';
             }
         } catch {
             this.elements.modelSelect.innerHTML = '<option value="">Erreur</option>';
@@ -372,14 +437,12 @@ class OllamaChat {
         
         if (!prompt || !this.currentModel || this.isGenerating) return;
         
-        // Ensure we have a current chat
         if (!this.currentChatId) {
-            this.createNewChat();
+            await this.createNewChat();
         }
         
         const chat = this.chats.get(this.currentChatId);
         
-        // Hide empty state if first message
         if (chat.messages.length === 0) {
             this.elements.emptyState?.remove();
         }
@@ -388,14 +451,17 @@ class OllamaChat {
         this.elements.sendBtn.disabled = true;
         this.elements.loading.style.display = 'block';
         
-        // Add user message
+        // Ajouter le message utilisateur
         const userMessage = { sender: 'user', content: prompt, timestamp: new Date() };
         chat.messages.push(userMessage);
         this.addMessageToDOM(prompt, 'user');
         
-        // Update chat title if it's the first message
+        // Sauvegarder le message en base
+        await this.saveMessageToDatabase(this.currentChatId, userMessage);
+        
+        // Mettre à jour le titre si c'est le premier message
         if (chat.messages.length === 1) {
-            this.updateChatTitle(this.currentChatId, prompt);
+            await this.updateChatTitle(this.currentChatId, prompt);
         }
         
         this.elements.promptInput.value = '';
@@ -408,15 +474,24 @@ class OllamaChat {
             const errorMessage = { sender: 'assistant', content: '❌ Erreur lors de la génération', timestamp: new Date() };
             chat.messages.push(errorMessage);
             this.addMessageToDOM('❌ Erreur lors de la génération', 'assistant');
+            await this.saveMessageToDatabase(this.currentChatId, errorMessage);
         } finally {
             this.isGenerating = false;
             this.elements.sendBtn.disabled = false;
             this.elements.loading.style.display = 'none';
             
-            // Update chat timestamp and save
+            // Mettre à jour le timestamp du chat
             chat.updatedAt = new Date();
+            await fetch(`/api/chats/${this.currentChatId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: chat.title,
+                    updatedAt: chat.updatedAt.toISOString()
+                })
+            });
+            
             this.renderChatHistory();
-            this.saveChatHistory();
         }
     }
 
@@ -448,10 +523,11 @@ class OllamaChat {
             this.scrollToBottom();
         }
         
-        // Save assistant message to chat
+        // Sauvegarder la réponse de l'assistant
         const chat = this.chats.get(this.currentChatId);
         const assistantMsg = { sender: 'assistant', content: fullResponse, timestamp: new Date() };
         chat.messages.push(assistantMsg);
+        await this.saveMessageToDatabase(this.currentChatId, assistantMsg);
     }
 
     addMessageToDOM(content, sender, scrollToBottom = true) {

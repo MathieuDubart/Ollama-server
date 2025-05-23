@@ -12,7 +12,7 @@
     
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <button class="new-chat-btn" id="newChatBtn">+ Nouveau chat</button>
+            <button class="new-chat-btn" id="newChatBtn">+ New chat</button>
             <button class="sidebar-toggle" id="sidebarToggle">←</button>
         </div>
         
@@ -21,7 +21,7 @@
         </div>
         
         <div class="sidebar-footer">
-            <button class="clear-all-btn" id="clearAllBtn">Tout effacer</button>
+            <button class="clear-all-btn" id="clearAllBtn">Delete all chats</button>
         </div>
     </div>
 
@@ -35,30 +35,30 @@
                 <button class="theme-toggle" id="themeToggle">🌙</button>
                 <div class="status">
                     <div class="status-dot" id="statusDot"></div>
-                    <span id="statusText">Connexion...</span>
+                    <span id="statusText">Connecting...</span>
                 </div>
                 <select id="modelSelect">
-                    <option value="">Chargement...</option>
+                    <option value="">Loading...</option>
                 </select>
-                <button class="clear-btn" id="clearBtn">Effacer</button>
+                <button class="clear-btn" id="clearBtn">Delete</button>
             </div>
         </div>
 
         <div class="chat-container">
             <div class="messages" id="messages">
                 <div class="empty-state">
-                    <h2>Prêt à discuter</h2>
-                    <p>Sélectionnez un modèle et commencez la conversation</p>
+                    <h2>Ready to chat</h2>
+                    <p>Select a model and start conversation</p>
                 </div>
             </div>
             
-            <div class="loading" id="loading">Génération en cours...</div>
+            <div class="loading" id="loading">Generating a response</div>
 
             <div class="input-area">
                 <div class="input-container">
                     <textarea 
                         id="promptInput" 
-                        placeholder="Votre message..."
+                        placeholder="Write your message..."
                         rows="1"></textarea>
                     <button class="send-btn" id="sendBtn">➤</button>
                 </div>
