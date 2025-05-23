@@ -134,7 +134,7 @@ app.delete('/api/chats/:chatId/messages', async (req, res) => {
         const { chatId } = req.params;
         await db.clearChatMessages(chatId);
         await db.updateChat(chatId, {
-            title: 'Nouveau chat',
+            title: 'New chat',
             updatedAt: new Date()
         });
         res.json({ success: true });
@@ -155,18 +155,49 @@ app.delete('/api/chats', async (req, res) => {
     }
 });
 
+// Fonction pour construire le contexte des messages précédents
+function buildContextualPrompt(messages, currentPrompt, contextSize = 5) {
+    // Prendre les derniers messages (contextSize * 2 car on a user + assistant)
+    const recentMessages = messages.slice(-contextSize * 2);
+    
+    if (recentMessages.length === 0) {
+        return currentPrompt;
+    }
+    
+    // Construire le contexte
+    let contextualPrompt = "Here is the conversation history for context:\n\n";
+    
+    recentMessages.forEach(msg => {
+        const role = msg.sender === 'user' ? 'Human' : 'Assistant';
+        contextualPrompt += `${role}: ${msg.content}\n\n`;
+    });
+    
+    contextualPrompt += `Human: ${currentPrompt}\n\nAssistant: `;
+    
+    return contextualPrompt;
+}
+
 app.post('/api/generate', async (req, res) => {
-    const { model, prompt, stream = false } = req.body;
+    const { model, prompt, stream = false, messages = [] } = req.body;
 
     if (!model || !prompt) {
         return res.status(400).json({ error: 'Model and/or prompt are mandatory' });
     }
 
     try {
+        // Construire le prompt contextuel avec les messages précédents
+        const contextualPrompt = buildContextualPrompt(messages, prompt, 5);
+        
+        console.log('Contexte envoyé à Ollama:', {
+            originalPrompt: prompt,
+            contextualPrompt: contextualPrompt.substring(0, 200) + '...',
+            messagesCount: messages.length
+        });
+
         if (stream) {
             const response = await axios.post(`${OLLAMA_URL}/api/generate`, {
                 model,
-                prompt,
+                prompt: contextualPrompt,
                 stream: true
             }, {
                 responseType: 'stream'
@@ -200,7 +231,7 @@ app.post('/api/generate', async (req, res) => {
         } else {
             const response = await axios.post(`${OLLAMA_URL}/api/generate`, {
                 model,
-                prompt,
+                prompt: contextualPrompt,
                 stream: false
             });
 

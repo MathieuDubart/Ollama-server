@@ -6,12 +6,34 @@ class OllamaChat {
         this.chats = new Map();
         this.currentChatId = null;
         this.chatCounter = 0;
+        this.contextSize = 5; // Nombre de messages précédents à inclure
         
+        this.initializeMarkdown();
         this.initializeElements();
         this.attachEventListeners();
         this.loadTheme();
         this.loadChatHistory();
         this.initialize();
+    }
+
+    initializeMarkdown() {
+        // Configuration de marked pour une meilleure sécurité et performance
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                highlight: function(code, lang) {
+                    if (typeof Prism !== 'undefined' && lang && Prism.languages[lang]) {
+                        try {
+                            return Prism.highlight(code, Prism.languages[lang], lang);
+                        } catch (e) {
+                            return code;
+                        }
+                    }
+                    return code;
+                },
+                breaks: true,
+                gfm: true
+            });
+        }
     }
 
     initializeElements() {
@@ -123,7 +145,7 @@ class OllamaChat {
     }
 
     async deleteChat(chatId) {
-        if (confirm('Are your sure you want to delete this chat?')) {
+        if (confirm('Are you sure you want to delete this chat?')) {
             try {
                 // Supprimer de la base de données
                 await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
@@ -158,7 +180,7 @@ class OllamaChat {
                 
                 const chat = this.chats.get(this.currentChatId);
                 chat.messages = [];
-                chat.title = 'Nouveau chat';
+                chat.title = 'New chat';
                 chat.updatedAt = new Date();
                 
                 this.renderChatHistory();
@@ -195,13 +217,14 @@ class OllamaChat {
             const chatItem = document.createElement('div');
             chatItem.className = `chat-item ${chat.id === this.currentChatId ? 'active' : ''}`;
             
+            // Extraire le texte brut pour l'aperçu (sans markdown)
             const preview = chat.messages.length > 0 
-                ? chat.messages[chat.messages.length - 1].content.substring(0, 50) + '...'
+                ? this.stripMarkdown(chat.messages[chat.messages.length - 1].content).substring(0, 50) + '...'
                 : 'Empty chat';
             
             chatItem.innerHTML = `
-                <div class="chat-item-title">${chat.title}</div>
-                <div class="chat-item-preview">${preview}</div>
+                <div class="chat-item-title">${this.escapeHtml(chat.title)}</div>
+                <div class="chat-item-preview">${this.escapeHtml(preview)}</div>
                 <div class="chat-item-actions">
                     <button class="chat-action-btn" onclick="app.deleteChat('${chat.id}')">🗑</button>
                 </div>
@@ -249,9 +272,11 @@ class OllamaChat {
         if (this.chats.has(chatId)) {
             const chat = this.chats.get(chatId);
             if (chat.title === 'New chat') {
-                chat.title = firstMessage.length > 30 
-                    ? firstMessage.substring(0, 30) + '...'
-                    : firstMessage;
+                // Extraire le texte brut pour le titre
+                const cleanMessage = this.stripMarkdown(firstMessage);
+                chat.title = cleanMessage.length > 30 
+                    ? cleanMessage.substring(0, 30) + '...'
+                    : cleanMessage;
                 chat.updatedAt = new Date();
                 
                 // Mettre à jour en base de données
@@ -267,6 +292,68 @@ class OllamaChat {
                 this.renderChatHistory();
             }
         }
+    }
+
+    // Fonction pour obtenir le contexte des messages précédents
+    getContextMessages(chat) {
+        // Prendre les derniers messages selon contextSize
+        const maxMessages = this.contextSize * 2; // user + assistant pairs
+        const contextMessages = chat.messages.slice(-maxMessages);
+        
+        console.log(`Contexte: ${contextMessages.length} messages sur ${chat.messages.length} total`);
+        
+        return contextMessages;
+    }
+
+    // Utilitaire pour supprimer le markdown d'un texte
+    stripMarkdown(text) {
+        if (!text) return '';
+        
+        return text
+            .replace(/#{1,6}\s+/g, '') // Headers
+            .replace(/\*\*(.*?)\*\*/g, '$1') // Bold
+            .replace(/\*(.*?)\*/g, '$1') // Italic
+            .replace(/`(.*?)`/g, '$1') // Inline code
+            .replace(/```[\s\S]*?```/g, '[Code Block]') // Code blocks
+            .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Links
+            .replace(/>/g, '') // Blockquotes
+            .replace(/[-*+]\s+/g, '') // List items
+            .replace(/\d+\.\s+/g, '') // Numbered lists
+            .replace(/\n+/g, ' ') // Multiple newlines
+            .trim();
+    }
+
+    // Utilitaire pour échapper le HTML
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Ajouter un bouton de copie aux blocs de code
+    addCopyButtonToCodeBlocks(messageElement) {
+        const codeBlocks = messageElement.querySelectorAll('pre');
+        codeBlocks.forEach((block, index) => {
+            const container = document.createElement('div');
+            container.className = 'code-block-container';
+            
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'code-copy-btn';
+            copyBtn.textContent = 'Copy';
+            copyBtn.onclick = () => {
+                const code = block.querySelector('code')?.textContent || block.textContent;
+                navigator.clipboard.writeText(code).then(() => {
+                    copyBtn.textContent = 'Copied!';
+                    setTimeout(() => {
+                        copyBtn.textContent = 'Copy';
+                    }, 2000);
+                });
+            };
+            
+            block.parentNode.insertBefore(container, block);
+            container.appendChild(block);
+            container.appendChild(copyBtn);
+        });
     }
 
     async saveChatToDatabase(chat) {
@@ -421,7 +508,7 @@ class OllamaChat {
                 this.elements.modelSelect.innerHTML = '<option value="">No model available</option>';
             }
         } catch {
-            this.elements.modelSelect.innerHTML = '<option value="">Erreur</option>';
+            this.elements.modelSelect.innerHTML = '<option value="">Error</option>';
         }
     }
 
@@ -468,12 +555,12 @@ class OllamaChat {
         this.elements.promptInput.style.height = 'auto';
         
         try {
-            await this.handleStreamingResponse(prompt);
+            await this.handleStreamingResponse(prompt, chat);
         } catch (error) {
-            console.error('Erreur:', error);
-            const errorMessage = { sender: 'assistant', content: '❌ Erreur lors de la génération', timestamp: new Date() };
+            console.error('Error:', error);
+            const errorMessage = { sender: 'assistant', content: '❌ Error during generation', timestamp: new Date() };
             chat.messages.push(errorMessage);
-            this.addMessageToDOM('❌ Erreur lors de la génération', 'assistant');
+            this.addMessageToDOM('❌ Error during generation', 'assistant');
             await this.saveMessageToDatabase(this.currentChatId, errorMessage);
         } finally {
             this.isGenerating = false;
@@ -495,14 +582,21 @@ class OllamaChat {
         }
     }
 
-    async handleStreamingResponse(prompt) {
+    async handleStreamingResponse(prompt, chat) {
+        // Obtenir les messages de contexte (exclure le dernier message qui vient d'être ajouté)
+        const contextMessages = this.getContextMessages({
+            ...chat,
+            messages: chat.messages.slice(0, -1) // Exclure le message qu'on vient d'ajouter
+        });
+
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: this.currentModel,
                 prompt: prompt,
-                stream: true
+                stream: true,
+                messages: contextMessages // Envoyer le contexte au serveur
             })
         });
 
@@ -519,21 +613,49 @@ class OllamaChat {
 
             const chunk = decoder.decode(value);
             fullResponse += chunk;
-            assistantMessage.textContent = fullResponse;
+            
+            // Rendre le markdown en temps réel
+            this.updateMessageContent(assistantMessage, fullResponse);
             this.scrollToBottom();
         }
         
         // Sauvegarder la réponse de l'assistant
-        const chat = this.chats.get(this.currentChatId);
         const assistantMsg = { sender: 'assistant', content: fullResponse, timestamp: new Date() };
         chat.messages.push(assistantMsg);
         await this.saveMessageToDatabase(this.currentChatId, assistantMsg);
     }
 
+    updateMessageContent(messageElement, content) {
+        if (messageElement.classList.contains('assistant')) {
+            // Rendu markdown pour les messages de l'assistant
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                const html = marked.parse(content);
+                const cleanHtml = DOMPurify.sanitize(html);
+                messageElement.innerHTML = cleanHtml;
+                
+                // Ajouter les boutons de copie pour les blocs de code
+                this.addCopyButtonToCodeBlocks(messageElement);
+                
+                // Re-highlight le code si Prism est disponible
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightAllUnder(messageElement);
+                }
+            } else {
+                messageElement.textContent = content;
+            }
+        } else {
+            // Texte brut pour les messages utilisateur
+            messageElement.textContent = content;
+        }
+    }
+
     addMessageToDOM(content, sender, scrollToBottom = true) {
         const message = document.createElement('div');
         message.className = `message ${sender}`;
-        message.textContent = content;
+        
+        // Utiliser la fonction updateMessageContent pour le rendu
+        this.updateMessageContent(message, content);
+        
         this.elements.messages.appendChild(message);
         if (scrollToBottom) {
             this.scrollToBottom();
