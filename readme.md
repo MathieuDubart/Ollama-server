@@ -53,5 +53,5 @@ If you encounter issues:
 ## Resources
 
 - [Ollama Documentation](https://github.com/ollama/ollama/tree/main/docs)
-- [Devstral GitHub](https://github.com/devstral/devstral)
+- [Devstral](https://mistral.ai/news/devstral)
 - [API Reference](https://github.com/ollama/ollama/blob/main/docs/api.md)
