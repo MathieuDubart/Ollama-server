@@ -1,4 +1,4 @@
-# Ollama Chat Server
+# Ollama Web UI
 
 A modern web interface for running and managing large language models locally using Ollama. Features include chat history, file uploads, dark/light themes, and conversation management.
 
@@ -27,7 +27,7 @@ Download the installer from the website and run it.
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone git@github.com:MathieuDubart/Ollama-web-ui.git
 cd ollama-server
 
 # Install dependencies
