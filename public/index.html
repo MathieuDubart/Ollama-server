@@ -5,34 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ollama Chat</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Prism.js pour la coloration syntaxique - LOCAL -->
-    <link href="lib/prism/prism-tomorrow.css" rel="stylesheet" />
-    <script src="lib/prism/prism-core.js"></script>
-    <!-- Composants Prism pour différents langages -->
-    <script src="lib/prism/prism-markup.js"></script>
-    <script src="lib/prism/prism-css.js"></script>
-    <script src="lib/prism/prism-javascript.js"></script>
-    <script src="lib/prism/prism-python.js"></script>
-    <script src="lib/prism/prism-json.js"></script>
-    <script src="lib/prism/prism-markdown.js"></script>
-    <script src="lib/prism/prism-sql.js"></script>
-    <script src="lib/prism/prism-java.js"></script>
-    <script src="lib/prism/prism-c.js"></script>
-    <script src="lib/prism/prism-cpp.js"></script>
-    <script src="lib/prism/prism-php.js"></script>
-    <script src="lib/prism/prism-ruby.js"></script>
-    <script src="lib/prism/prism-go.js"></script>
-    <script src="lib/prism/prism-rust.js"></script>
-    <script src="lib/prism/prism-typescript.js"></script>
-    <script src="lib/prism/prism-jsx.js"></script>
-    <script src="lib/prism/prism-tsx.js"></script>
-    <!-- Marked pour le Markdown - LOCAL -->
-    <script src="lib/marked.min.js"></script>
-    <!-- DOMPurify pour la sécurité - LOCAL -->
-    <script src="lib/purify.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 </head>
 <body class="dark-theme">
-    <!-- Bouton pour rouvrir la sidebar -->
     <button class="sidebar-reopener" id="sidebarReopener">→</button>
     
     <div class="sidebar" id="sidebar">
@@ -42,33 +17,34 @@
         </div>
         
         <div class="chat-history" id="chatHistory">
-            <!-- Les chats seront ajoutés ici dynamiquement -->
         </div>
         
         <div class="sidebar-footer">
-            <button class="clear-all-btn" id="clearAllBtn">Delete all chats</button>
+            <button class="import-btn" id="importBtn">📁 Import chats</button>
+            <button class="clear-all-btn" id="clearAllBtn">🗑️ Delete all chats</button>
+            <input type="file" id="importInput" accept=".json" style="display: none;">
         </div>
     </div>
-
+    
     <div class="main-content">
         <div class="header">
-            <div class="header-left">
-                <button class="sidebar-toggle mobile" id="sidebarToggleMobile">☰</button>
-                <h1>🦙 Ollama</h1>
+            <button class="sidebar-toggle-mobile" id="sidebarToggleMobile">☰</button>
+            
+            <div class="status">
+                <span class="status-dot" id="statusDot"></span>
+                <span class="status-text" id="statusText">Connecting...</span>
             </div>
+            
             <div class="header-controls">
-                <button class="theme-toggle" id="themeToggle">🌙</button>
-                <div class="status">
-                    <div class="status-dot" id="statusDot"></div>
-                    <span id="statusText">Connecting...</span>
-                </div>
-                <select id="modelSelect">
-                    <option value="">Loading...</option>
+                <select id="modelSelect" class="model-select">
+                    <option value="">Select model...</option>
                 </select>
-                <button class="clear-btn" id="clearBtn">Delete</button>
+                
+                <button class="clear-btn" id="clearBtn" title="Clear current chat">🧹</button>
+                <button class="theme-toggle" id="themeToggle">🌙</button>
             </div>
         </div>
-
+        
         <div class="chat-container">
             <div class="messages" id="messages">
                 <div class="empty-state">
@@ -77,31 +53,44 @@
                 </div>
             </div>
             
-            <div class="loading" id="loading">Generating a response</div>
-
+            <div class="loading" id="loading">Generating response...</div>
+            
             <div class="input-area">
-                <!-- Zone d'affichage des fichiers sélectionnés -->
                 <div class="file-preview" id="filePreview"></div>
                 
                 <div class="input-container">
                     <div class="input-wrapper">
                         <textarea 
                             id="promptInput" 
-                            placeholder="Write your message..."
-                            rows="1"></textarea>
+                            placeholder="Type your message here... (Shift+Enter for new line)"
+                            rows="1"
+                        ></textarea>
                         <div class="input-actions">
-                            <!-- Input file caché -->
-                            <input type="file" id="fileInput" multiple accept=".txt,.md,.js,.py,.json,.csv,.html,.css,.xml,.c,.cpp,.java,.php,.rb,.go,.rs,.swift,.kt,.ts,.jsx,.tsx,.vue,.svelte" style="display: none;">
-                            <!-- Bouton d'attachement de fichiers -->
-                            <button class="file-btn" id="fileBtn" title="Attach files">📎</button>
-                            <button class="send-btn" id="sendBtn">➤</button>
+                            <button class="file-btn" id="fileBtn" title="Attach file">📎</button>
+                            <button class="send-btn" id="sendBtn" title="Send message">➤</button>
                         </div>
                     </div>
                 </div>
+                
+                <input type="file" id="fileInput" multiple accept=".txt,.md,.js,.py,.html,.css,.json,.xml,.csv" style="display: none;">
             </div>
         </div>
     </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-swift.min.js"></script>
 
-    <script src="script.js"></script>
+
+    <script type="module" src="script.js"></script>
 </body>
 </html>

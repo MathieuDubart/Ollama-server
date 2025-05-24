@@ -9,7 +9,6 @@ class Database {
 
     init() {
         this.db.serialize(() => {
-            // Table des chats
             this.db.run(`
                 CREATE TABLE IF NOT EXISTS chats (
                     id TEXT PRIMARY KEY,
@@ -19,7 +18,6 @@ class Database {
                 )
             `);
 
-            // Table des messages
             this.db.run(`
                 CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +29,6 @@ class Database {
                 )
             `);
 
-            // Table des fichiers
             this.db.run(`
                 CREATE TABLE IF NOT EXISTS files (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,13 +46,11 @@ class Database {
         });
     }
 
-    // Sauvegarder un chat
     saveChat(chat) {
         return new Promise((resolve, reject) => {
             const { id, title, createdAt, updatedAt } = chat;
             this.db.run(
-                `INSERT OR REPLACE INTO chats (id, title, created_at, updated_at) 
-                 VALUES (?, ?, ?, ?)`,
+                `INSERT OR REPLACE INTO chats (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)`,
                 [id, title, createdAt.toISOString(), updatedAt.toISOString()],
                 function(err) {
                     if (err) reject(err);
@@ -65,13 +60,11 @@ class Database {
         });
     }
 
-    // Sauvegarder un message
     saveMessage(chatId, message) {
         return new Promise((resolve, reject) => {
             const { sender, content, timestamp } = message;
             this.db.run(
-                `INSERT INTO messages (chat_id, sender, content, timestamp) 
-                 VALUES (?, ?, ?, ?)`,
+                `INSERT INTO messages (chat_id, sender, content, timestamp) VALUES (?, ?, ?, ?)`,
                 [chatId, sender, content, timestamp.toISOString()],
                 function(err) {
                     if (err) reject(err);
@@ -81,13 +74,11 @@ class Database {
         });
     }
 
-    // Sauvegarder un fichier
     saveFile(messageId, fileData) {
         return new Promise((resolve, reject) => {
             const { filename, originalName, filePath, fileSize, mimeType, content } = fileData;
             this.db.run(
-                `INSERT INTO files (message_id, filename, original_name, file_path, file_size, mime_type, content) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO files (message_id, filename, original_name, file_path, file_size, mime_type, content) VALUES (?, ?, ?, ?, ?, ?, ?)`,
                 [messageId, filename, originalName, filePath, fileSize, mimeType, content],
                 function(err) {
                     if (err) reject(err);
@@ -97,7 +88,6 @@ class Database {
         });
     }
 
-    // Récupérer tous les chats
     getAllChats() {
         return new Promise((resolve, reject) => {
             this.db.all(
@@ -111,16 +101,12 @@ class Database {
         });
     }
 
-    // Récupérer les messages d'un chat avec leurs fichiers
     getChatMessages(chatId) {
         return new Promise((resolve, reject) => {
             this.db.all(
-                `SELECT m.*, 
-                        f.id as file_id, f.filename, f.original_name, f.file_size, f.mime_type, f.content as file_content
-                 FROM messages m
-                 LEFT JOIN files f ON m.id = f.message_id
-                 WHERE m.chat_id = ? 
-                 ORDER BY m.timestamp ASC`,
+                `SELECT m.*, f.id as file_id, f.filename, f.original_name, f.file_size, f.mime_type, f.content as file_content
+                 FROM messages m LEFT JOIN files f ON m.id = f.message_id
+                 WHERE m.chat_id = ? ORDER BY m.timestamp ASC`,
                 [chatId],
                 (err, rows) => {
                     if (err) {
@@ -128,7 +114,6 @@ class Database {
                         return;
                     }
 
-                    // Grouper les messages avec leurs fichiers
                     const messagesMap = new Map();
                     
                     rows.forEach(row => {
@@ -161,7 +146,6 @@ class Database {
         });
     }
 
-    // Récupérer les fichiers d'un message
     getMessageFiles(messageId) {
         return new Promise((resolve, reject) => {
             this.db.all(
@@ -175,7 +159,6 @@ class Database {
         });
     }
 
-    // Supprimer un chat
     deleteChat(chatId) {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -189,7 +172,6 @@ class Database {
         });
     }
 
-    // Vider les messages d'un chat
     clearChatMessages(chatId) {
         return new Promise((resolve, reject) => {
             this.db.run(
@@ -203,7 +185,6 @@ class Database {
         });
     }
 
-    // Supprimer tous les chats
     deleteAllChats() {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
@@ -221,7 +202,6 @@ class Database {
         });
     }
 
-    // Mettre à jour un chat
     updateChat(chatId, updates) {
         return new Promise((resolve, reject) => {
             const { title, updatedAt } = updates;

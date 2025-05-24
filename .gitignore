@@ -19,6 +19,3 @@ pids
 *.pid
 *.seed
 *.pid.lock
-
-# Dépendances copiées (seront regénérées par npm install)
-public/lib/
