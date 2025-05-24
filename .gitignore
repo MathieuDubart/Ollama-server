@@ -4,4 +4,21 @@ package-lock.json
 /node_modules
 node_modules
 
+# Base de données
 chats.db
+core/chats.db
+
+# Uploads
+uploads/
+
+# Logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dépendances copiées (seront regénérées par npm install)
+public/lib/

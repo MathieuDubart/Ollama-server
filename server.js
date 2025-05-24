@@ -1,6 +1,8 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const Database = require('./core/database');
 
 const app = express();
@@ -8,8 +10,59 @@ const PORT = 3000;
 const OLLAMA_URL = 'http://localhost:11434';
 const db = new Database();
 
-app.use(express.json());
+// Configuration multer pour l'upload de fichiers
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const uploadDir = path.join(__dirname, 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + '-' + file.originalname);
+    }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024 // 10MB limit
+    },
+    fileFilter: function (req, file, cb) {
+        // Autoriser les types de fichiers texte
+        const allowedMimes = [
+            'text/plain',
+            'text/csv',
+            'text/markdown',
+            'text/html',
+            'application/json',
+            'application/javascript',
+            'application/xml',
+            'text/css',
+            'text/x-python',
+            'text/x-java-source',
+            'text/x-c++src',
+            'application/pdf'
+        ];
+        
+        if (allowedMimes.includes(file.mimetype) || file.mimetype.startsWith('text/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Type de fichier non supporté'), false);
+        }
+    }
+});
+
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
+
+// Créer le dossier uploads s'il n'existe pas
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -25,7 +78,47 @@ app.get('/api/models', async (req, res) => {
     }
 });
 
-// Nouvelle route pour récupérer tous les chats
+// Route pour uploader des fichiers
+app.post('/api/upload', upload.array('files', 10), async (req, res) => {
+    try {
+        const processedFiles = [];
+        
+        for (const file of req.files) {
+            let content = '';
+            
+            // Lire le contenu du fichier pour les types supportés
+            if (file.mimetype.startsWith('text/') || 
+                ['application/json', 'application/javascript', 'application/xml'].includes(file.mimetype)) {
+                content = fs.readFileSync(file.path, 'utf8');
+            }
+            
+            processedFiles.push({
+                filename: file.filename,
+                originalName: file.originalname,
+                filePath: file.path,
+                fileSize: file.size,
+                mimeType: file.mimetype,
+                content: content
+            });
+        }
+        
+        res.json({ 
+            success: true, 
+            files: processedFiles.map(f => ({
+                filename: f.filename,
+                originalName: f.originalName,
+                fileSize: f.fileSize,
+                mimeType: f.mimeType,
+                content: f.content
+            }))
+        });
+    } catch (error) {
+        console.error('Error uploading files:', error);
+        res.status(500).json({ error: 'Error uploading files' });
+    }
+});
+
+// Route pour récupérer tous les chats
 app.get('/api/chats', async (req, res) => {
     try {
         const chats = await db.getAllChats();
@@ -38,9 +131,11 @@ app.get('/api/chats', async (req, res) => {
                     createdAt: chat.created_at,
                     updatedAt: chat.updated_at,
                     messages: messages.map(msg => ({
+                        id: msg.id,
                         sender: msg.sender,
                         content: msg.content,
-                        timestamp: msg.timestamp
+                        timestamp: msg.timestamp,
+                        files: msg.files || []
                     }))
                 };
             })
@@ -52,7 +147,7 @@ app.get('/api/chats', async (req, res) => {
     }
 });
 
-// Nouvelle route pour sauvegarder un chat
+// Route pour sauvegarder un chat
 app.post('/api/chats', async (req, res) => {
     try {
         const { chat } = req.body;
@@ -63,13 +158,20 @@ app.post('/api/chats', async (req, res) => {
             updatedAt: new Date(chat.updatedAt)
         });
 
-        // Sauvegarder les messages
+        // Sauvegarder les messages avec leurs fichiers
         for (const message of chat.messages) {
-            await db.saveMessage(chat.id, {
+            const messageId = await db.saveMessage(chat.id, {
                 sender: message.sender,
                 content: message.content,
                 timestamp: new Date(message.timestamp)
             });
+
+            // Sauvegarder les fichiers associés
+            if (message.files && message.files.length > 0) {
+                for (const file of message.files) {
+                    await db.saveFile(messageId, file);
+                }
+            }
         }
 
         res.json({ success: true });
@@ -79,7 +181,7 @@ app.post('/api/chats', async (req, res) => {
     }
 });
 
-// Nouvelle route pour mettre à jour un chat
+// Route pour mettre à jour un chat
 app.put('/api/chats/:chatId', async (req, res) => {
     try {
         const { chatId } = req.params;
@@ -97,17 +199,24 @@ app.put('/api/chats/:chatId', async (req, res) => {
     }
 });
 
-// Nouvelle route pour sauvegarder un message
+// Route pour sauvegarder un message avec fichiers
 app.post('/api/chats/:chatId/messages', async (req, res) => {
     try {
         const { chatId } = req.params;
         const { message } = req.body;
         
-        await db.saveMessage(chatId, {
+        const messageId = await db.saveMessage(chatId, {
             sender: message.sender,
             content: message.content,
             timestamp: new Date(message.timestamp)
         });
+
+        // Sauvegarder les fichiers associés
+        if (message.files && message.files.length > 0) {
+            for (const file of message.files) {
+                await db.saveFile(messageId, file);
+            }
+        }
 
         res.json({ success: true });
     } catch (error) {
@@ -116,7 +225,7 @@ app.post('/api/chats/:chatId/messages', async (req, res) => {
     }
 });
 
-// Nouvelle route pour supprimer un chat
+// Route pour supprimer un chat
 app.delete('/api/chats/:chatId', async (req, res) => {
     try {
         const { chatId } = req.params;
@@ -128,7 +237,7 @@ app.delete('/api/chats/:chatId', async (req, res) => {
     }
 });
 
-// Nouvelle route pour vider un chat
+// Route pour vider un chat
 app.delete('/api/chats/:chatId/messages', async (req, res) => {
     try {
         const { chatId } = req.params;
@@ -144,7 +253,7 @@ app.delete('/api/chats/:chatId/messages', async (req, res) => {
     }
 });
 
-// Nouvelle route pour supprimer tous les chats
+// Route pour supprimer tous les chats
 app.delete('/api/chats', async (req, res) => {
     try {
         await db.deleteAllChats();
@@ -155,22 +264,29 @@ app.delete('/api/chats', async (req, res) => {
     }
 });
 
-// Fonction pour construire le contexte des messages précédents
-function buildContextualPrompt(messages, currentPrompt, contextSize = 5) {
-    // Prendre les derniers messages (contextSize * 2 car on a user + assistant)
+// Fonction pour construire le contexte des messages précédents avec fichiers
+function buildContextualPrompt(messages, currentPrompt, files = [], contextSize = 10) {
     const recentMessages = messages.slice(-contextSize * 2);
     
-    if (recentMessages.length === 0) {
-        return currentPrompt;
+    let contextualPrompt = '';
+    
+    // Ajouter le contenu des fichiers au contexte si présent
+    if (files && files.length > 0) {
+        contextualPrompt += "Files provided for analysis:\n\n";
+        files.forEach(file => {
+            contextualPrompt += `--- ${file.originalName} (${file.mimeType}) ---\n`;
+            contextualPrompt += `${file.content}\n\n`;
+        });
+        contextualPrompt += "---\n\n";
     }
     
-    // Construire le contexte
-    let contextualPrompt = "Here is the conversation history for context:\n\n";
-    
-    recentMessages.forEach(msg => {
-        const role = msg.sender === 'user' ? 'Human' : 'Assistant';
-        contextualPrompt += `${role}: ${msg.content}\n\n`;
-    });
+    if (recentMessages.length > 0) {
+        contextualPrompt += "Here is the conversation history for context:\n\n";
+        recentMessages.forEach(msg => {
+            const role = msg.sender === 'user' ? 'Human' : 'Assistant';
+            contextualPrompt += `${role}: ${msg.content}\n\n`;
+        });
+    }
     
     contextualPrompt += `Human: ${currentPrompt}\n\nAssistant: `;
     
@@ -178,20 +294,21 @@ function buildContextualPrompt(messages, currentPrompt, contextSize = 5) {
 }
 
 app.post('/api/generate', async (req, res) => {
-    const { model, prompt, stream = false, messages = [] } = req.body;
+    const { model, prompt, stream = false, messages = [], files = [] } = req.body;
 
     if (!model || !prompt) {
         return res.status(400).json({ error: 'Model and/or prompt are mandatory' });
     }
 
     try {
-        // Construire le prompt contextuel avec les messages précédents
-        const contextualPrompt = buildContextualPrompt(messages, prompt, 5);
+        // Construire le prompt contextuel avec les messages précédents et fichiers
+        const contextualPrompt = buildContextualPrompt(messages, prompt, files, 5);
         
         console.log('Contexte envoyé à Ollama:', {
             originalPrompt: prompt,
-            contextualPrompt: contextualPrompt.substring(0, 200) + '...',
-            messagesCount: messages.length
+            contextualPrompt: contextualPrompt.substring(0, 300) + '...',
+            messagesCount: messages.length,
+            filesCount: files?.length || 0
         });
 
         if (stream) {

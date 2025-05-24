@@ -6,7 +6,8 @@ class OllamaChat {
         this.chats = new Map();
         this.currentChatId = null;
         this.chatCounter = 0;
-        this.contextSize = 5; // Nombre de messages précédents à inclure
+        this.contextSize = 10;
+        this.selectedFiles = [];
         
         this.initializeMarkdown();
         this.initializeElements();
@@ -17,7 +18,6 @@ class OllamaChat {
     }
 
     initializeMarkdown() {
-        // Configuration de marked pour une meilleure sécurité et performance
         if (typeof marked !== 'undefined') {
             marked.setOptions({
                 highlight: function(code, lang) {
@@ -57,7 +57,12 @@ class OllamaChat {
             loading: document.getElementById('loading'),
             promptInput: document.getElementById('promptInput'),
             sendBtn: document.getElementById('sendBtn'),
-            emptyState: document.querySelector('.empty-state')
+            emptyState: document.querySelector('.empty-state'),
+            
+            // File elements
+            fileInput: document.getElementById('fileInput'),
+            fileBtn: document.getElementById('fileBtn'),
+            filePreview: document.getElementById('filePreview')
         };
     }
 
@@ -86,6 +91,96 @@ class OllamaChat {
         this.elements.modelSelect.addEventListener('change', (e) => {
             this.currentModel = e.target.value;
         });
+        
+        // File handling
+        this.elements.fileBtn.addEventListener('click', () => this.elements.fileInput.click());
+        this.elements.fileInput.addEventListener('change', (e) => this.handleFileSelection(e));
+    }
+
+    async handleFileSelection(event) {
+        const files = Array.from(event.target.files);
+        
+        for (const file of files) {
+            try {
+                await this.addFile(file);
+            } catch (error) {
+                console.error('Error adding file:', error);
+                alert(`Error adding file ${file.name}: ${error.message}`);
+            }
+        }
+        
+        // Clear input
+        event.target.value = '';
+        this.updateFilePreview();
+    }
+
+    async addFile(file) {
+        // Vérifier la taille (10MB max)
+        if (file.size > 10 * 1024 * 1024) {
+            throw new Error('File too large (max 10MB)');
+        }
+        
+        // Lire le contenu du fichier
+        const content = await this.readFileContent(file);
+        
+        const fileData = {
+            filename: `${Date.now()}-${file.name}`,
+            originalName: file.name,
+            fileSize: file.size,
+            mimeType: file.type || 'text/plain',
+            content: content
+        };
+        
+        this.selectedFiles.push(fileData);
+    }
+
+    readFileContent(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                resolve(e.target.result);
+            };
+            
+            reader.onerror = (e) => {
+                reject(new Error('Error reading file'));
+            };
+            
+            reader.readAsText(file);
+        });
+    }
+
+    updateFilePreview() {
+        if (this.selectedFiles.length === 0) {
+            this.elements.filePreview.classList.remove('has-files');
+            this.elements.filePreview.innerHTML = '';
+            return;
+        }
+        
+        this.elements.filePreview.classList.add('has-files');
+        this.elements.filePreview.innerHTML = this.selectedFiles.map((file, index) => `
+            <div class="file-preview-item">
+                <span class="file-preview-icon">📄</span>
+                <div class="file-preview-info">
+                    <div class="file-preview-name">${this.escapeHtml(file.originalName)}</div>
+                    <div class="file-preview-size">${this.formatFileSize(file.fileSize)}</div>
+                </div>
+                <button class="file-remove-btn" onclick="app.removeFile(${index})">✕</button>
+            </div>
+        `).join('');
+    }
+
+    removeFile(index) {
+        this.selectedFiles.splice(index, 1);
+        this.updateFilePreview();
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     toggleSidebar() {
@@ -132,6 +227,10 @@ class OllamaChat {
         this.renderChatHistory();
         this.renderCurrentChat();
         
+        // Clear selected files when creating new chat
+        this.selectedFiles = [];
+        this.updateFilePreview();
+        
         // Sauvegarder en base de données
         await this.saveChatToDatabase(chat);
     }
@@ -141,13 +240,16 @@ class OllamaChat {
             this.currentChatId = chatId;
             this.renderChatHistory();
             this.renderCurrentChat();
+            
+            // Clear selected files when switching chats
+            this.selectedFiles = [];
+            this.updateFilePreview();
         }
     }
 
     async deleteChat(chatId) {
         if (confirm('Are you sure you want to delete this chat?')) {
             try {
-                // Supprimer de la base de données
                 await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
                 
                 this.chats.delete(chatId);
@@ -167,7 +269,7 @@ class OllamaChat {
                 this.renderChatHistory();
                 this.renderCurrentChat();
             } catch (error) {
-                console.error('Error while deleting chats : ', error);
+                console.error('Error while deleting chats:', error);
             }
         }
     }
@@ -186,7 +288,7 @@ class OllamaChat {
                 this.renderChatHistory();
                 this.renderCurrentChat();
             } catch (error) {
-                console.error('Error while cleaning chats :', error);
+                console.error('Error while cleaning chats:', error);
             }
         }
     }
@@ -253,7 +355,7 @@ class OllamaChat {
             this.showEmptyState();
         } else {
             chat.messages.forEach(message => {
-                this.addMessageToDOM(message.content, message.sender, false);
+                this.addMessageToDOM(message.content, message.sender, false, message.files || []);
             });
         }
     }
@@ -369,13 +471,14 @@ class OllamaChat {
                         updatedAt: chat.updatedAt.toISOString(),
                         messages: chat.messages.map(msg => ({
                             ...msg,
-                            timestamp: msg.timestamp.toISOString()
+                            timestamp: msg.timestamp.toISOString(),
+                            files: msg.files || []
                         }))
                     }
                 })
             });
         } catch (error) {
-            console.error('Error while saving chat : ', error);
+            console.error('Error while saving chat:', error);
         }
     }
 
@@ -388,7 +491,8 @@ class OllamaChat {
                     message: {
                         sender: message.sender,
                         content: message.content,
-                        timestamp: message.timestamp.toISOString()
+                        timestamp: message.timestamp.toISOString(),
+                        files: message.files || []
                     }
                 })
             });
@@ -411,9 +515,11 @@ class OllamaChat {
                     createdAt: new Date(chatData.createdAt),
                     updatedAt: new Date(chatData.updatedAt),
                     messages: chatData.messages.map(msg => ({
+                        id: msg.id,
                         sender: msg.sender,
                         content: msg.content,
-                        timestamp: new Date(msg.timestamp)
+                        timestamp: new Date(msg.timestamp),
+                        files: msg.files || []
                     }))
                 };
                 this.chats.set(chat.id, chat);
@@ -538,10 +644,18 @@ class OllamaChat {
         this.elements.sendBtn.disabled = true;
         this.elements.loading.style.display = 'block';
         
-        // Ajouter le message utilisateur
-        const userMessage = { sender: 'user', content: prompt, timestamp: new Date() };
+        // Copier les fichiers sélectionnés pour ce message
+        const messageFiles = [...this.selectedFiles];
+        
+        // Ajouter le message utilisateur avec les fichiers
+        const userMessage = { 
+            sender: 'user', 
+            content: prompt, 
+            timestamp: new Date(),
+            files: messageFiles
+        };
         chat.messages.push(userMessage);
-        this.addMessageToDOM(prompt, 'user');
+        this.addMessageToDOM(prompt, 'user', true, messageFiles);
         
         // Sauvegarder le message en base
         await this.saveMessageToDatabase(this.currentChatId, userMessage);
@@ -551,14 +665,22 @@ class OllamaChat {
             await this.updateChatTitle(this.currentChatId, prompt);
         }
         
+        // Clear input and files
         this.elements.promptInput.value = '';
         this.elements.promptInput.style.height = 'auto';
+        this.selectedFiles = [];
+        this.updateFilePreview();
         
         try {
-            await this.handleStreamingResponse(prompt, chat);
+            await this.handleStreamingResponse(prompt, chat, messageFiles);
         } catch (error) {
             console.error('Error:', error);
-            const errorMessage = { sender: 'assistant', content: '❌ Error during generation', timestamp: new Date() };
+            const errorMessage = { 
+                sender: 'assistant', 
+                content: '❌ Error during generation', 
+                timestamp: new Date(),
+                files: []
+            };
             chat.messages.push(errorMessage);
             this.addMessageToDOM('❌ Error during generation', 'assistant');
             await this.saveMessageToDatabase(this.currentChatId, errorMessage);
@@ -582,7 +704,7 @@ class OllamaChat {
         }
     }
 
-    async handleStreamingResponse(prompt, chat) {
+    async handleStreamingResponse(prompt, chat, files = []) {
         // Obtenir les messages de contexte (exclure le dernier message qui vient d'être ajouté)
         const contextMessages = this.getContextMessages({
             ...chat,
@@ -596,7 +718,8 @@ class OllamaChat {
                 model: this.currentModel,
                 prompt: prompt,
                 stream: true,
-                messages: contextMessages // Envoyer le contexte au serveur
+                messages: contextMessages,
+                files: files // Envoyer les fichiers avec la requête
             })
         });
 
@@ -620,7 +743,12 @@ class OllamaChat {
         }
         
         // Sauvegarder la réponse de l'assistant
-        const assistantMsg = { sender: 'assistant', content: fullResponse, timestamp: new Date() };
+        const assistantMsg = { 
+            sender: 'assistant', 
+            content: fullResponse, 
+            timestamp: new Date(),
+            files: []
+        };
         chat.messages.push(assistantMsg);
         await this.saveMessageToDatabase(this.currentChatId, assistantMsg);
     }
@@ -649,18 +777,44 @@ class OllamaChat {
         }
     }
 
-    addMessageToDOM(content, sender, scrollToBottom = true) {
+    addMessageToDOM(content, sender, scrollToBottom = true, files = []) {
         const message = document.createElement('div');
         message.className = `message ${sender}`;
         
+        // Créer le contenu du message
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        
         // Utiliser la fonction updateMessageContent pour le rendu
-        this.updateMessageContent(message, content);
+        this.updateMessageContent(messageContent, content);
+        message.appendChild(messageContent);
+        
+        // Ajouter les fichiers s'il y en a
+        if (files && files.length > 0) {
+            const filesContainer = document.createElement('div');
+            filesContainer.className = 'message-files';
+            
+            files.forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <span class="file-icon">📄</span>
+                    <div class="file-info">
+                        <div class="file-name">${this.escapeHtml(file.originalName)}</div>
+                        <div class="file-size">${this.formatFileSize(file.fileSize)}</div>
+                    </div>
+                `;
+                filesContainer.appendChild(fileItem);
+            });
+            
+            message.appendChild(filesContainer);
+        }
         
         this.elements.messages.appendChild(message);
         if (scrollToBottom) {
             this.scrollToBottom();
         }
-        return message;
+        return messageContent; // Retourner le contenu pour les mises à jour en streaming
     }
 
     scrollToBottom() {

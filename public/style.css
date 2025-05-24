@@ -410,6 +410,47 @@ select:focus, .clear-btn:hover {
     border-bottom-left-radius: 4px;
 }
 
+/* Files in messages */
+.message-files {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.message.assistant .message-files {
+    border-top-color: var(--border);
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    font-size: 0.875rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.message.assistant .file-item {
+    color: var(--text-secondary);
+}
+
+.file-icon {
+    font-size: 1rem;
+}
+
+.file-info {
+    flex: 1;
+}
+
+.file-name {
+    font-weight: 500;
+}
+
+.file-size {
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
 /* Styles Markdown pour les messages */
 .message.assistant h1,
 .message.assistant h2,
@@ -570,19 +611,83 @@ select:focus, .clear-btn:hover {
     border-top: 1px solid var(--border);
 }
 
+/* File preview area */
+.file-preview {
+    display: none;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.5rem;
+}
+
+.file-preview.has-files {
+    display: block;
+}
+
+.file-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.file-preview-icon {
+    font-size: 1rem;
+    color: var(--accent);
+}
+
+.file-preview-info {
+    flex: 1;
+}
+
+.file-preview-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.file-preview-size {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.file-remove-btn {
+    background: none;
+    border: none;
+    color: var(--error);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.file-remove-btn:hover {
+    background-color: var(--error);
+    color: white;
+}
+
+/* Input container */
 .input-container {
     display: flex;
     gap: 0.5rem;
     align-items: flex-end;
 }
 
-textarea {
+.input-wrapper {
     flex: 1;
+    position: relative;
+}
+
+textarea {
+    width: 100%;
     background-color: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--border-radius);
     color: var(--text-primary);
-    padding: 1rem;
+    padding: 1rem 60px 1rem 1rem;
     resize: none;
     min-height: 50px;
     max-height: 120px;
@@ -600,19 +705,49 @@ textarea::placeholder {
     color: var(--text-muted);
 }
 
+.input-actions {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.file-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+.file-btn:hover {
+    background-color: var(--bg-tertiary);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .send-btn {
     background-color: var(--accent);
     border: none;
     border-radius: 50%;
-    width: 50px;
-    height: 50px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: var(--transition);
     color: white;
-    font-size: 1.2rem;
+    font-size: 1.1rem;
 }
 
 .send-btn:hover:not(:disabled) {
@@ -714,5 +849,9 @@ textarea::placeholder {
 
     select {
         min-width: 100px;
+    }
+
+    textarea {
+        padding-right: 90px;
     }
 }

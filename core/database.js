@@ -30,6 +30,22 @@ class Database {
                     FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
                 )
             `);
+
+            // Table des fichiers
+            this.db.run(`
+                CREATE TABLE IF NOT EXISTS files (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message_id INTEGER NOT NULL,
+                    filename TEXT NOT NULL,
+                    original_name TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_size INTEGER NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    content TEXT,
+                    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (message_id) REFERENCES messages (id) ON DELETE CASCADE
+                )
+            `);
         });
     }
 
@@ -65,6 +81,22 @@ class Database {
         });
     }
 
+    // Sauvegarder un fichier
+    saveFile(messageId, fileData) {
+        return new Promise((resolve, reject) => {
+            const { filename, originalName, filePath, fileSize, mimeType, content } = fileData;
+            this.db.run(
+                `INSERT INTO files (message_id, filename, original_name, file_path, file_size, mime_type, content) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [messageId, filename, originalName, filePath, fileSize, mimeType, content],
+                function(err) {
+                    if (err) reject(err);
+                    else resolve(this.lastID);
+                }
+            );
+        });
+    }
+
     // Récupérer tous les chats
     getAllChats() {
         return new Promise((resolve, reject) => {
@@ -79,12 +111,62 @@ class Database {
         });
     }
 
-    // Récupérer les messages d'un chat
+    // Récupérer les messages d'un chat avec leurs fichiers
     getChatMessages(chatId) {
         return new Promise((resolve, reject) => {
             this.db.all(
-                `SELECT * FROM messages WHERE chat_id = ? ORDER BY timestamp ASC`,
+                `SELECT m.*, 
+                        f.id as file_id, f.filename, f.original_name, f.file_size, f.mime_type, f.content as file_content
+                 FROM messages m
+                 LEFT JOIN files f ON m.id = f.message_id
+                 WHERE m.chat_id = ? 
+                 ORDER BY m.timestamp ASC`,
                 [chatId],
+                (err, rows) => {
+                    if (err) {
+                        reject(err);
+                        return;
+                    }
+
+                    // Grouper les messages avec leurs fichiers
+                    const messagesMap = new Map();
+                    
+                    rows.forEach(row => {
+                        if (!messagesMap.has(row.id)) {
+                            messagesMap.set(row.id, {
+                                id: row.id,
+                                chat_id: row.chat_id,
+                                sender: row.sender,
+                                content: row.content,
+                                timestamp: row.timestamp,
+                                files: []
+                            });
+                        }
+                        
+                        if (row.file_id) {
+                            messagesMap.get(row.id).files.push({
+                                id: row.file_id,
+                                filename: row.filename,
+                                originalName: row.original_name,
+                                fileSize: row.file_size,
+                                mimeType: row.mime_type,
+                                content: row.file_content
+                            });
+                        }
+                    });
+
+                    resolve(Array.from(messagesMap.values()));
+                }
+            );
+        });
+    }
+
+    // Récupérer les fichiers d'un message
+    getMessageFiles(messageId) {
+        return new Promise((resolve, reject) => {
+            this.db.all(
+                `SELECT * FROM files WHERE message_id = ?`,
+                [messageId],
                 (err, rows) => {
                     if (err) reject(err);
                     else resolve(rows);
@@ -125,6 +207,9 @@ class Database {
     deleteAllChats() {
         return new Promise((resolve, reject) => {
             this.db.serialize(() => {
+                this.db.run(`DELETE FROM files`, (err) => {
+                    if (err) reject(err);
+                });
                 this.db.run(`DELETE FROM messages`, (err) => {
                     if (err) reject(err);
                 });
