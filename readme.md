@@ -32,9 +32,6 @@ cd ollama-server
 
 # Install dependencies
 npm install
-
-# Copy required assets
-npm run copy-assets
 ```
 
 ### 3. Download Models
